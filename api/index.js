@@ -11,7 +11,7 @@ const MONCASH_API_URL = "https://sandbox.moncashbutton.digicelgroup.com/Moncash-
 // Note: Puisque ce fichier est api/index.js (auparavant create-payment.js), 
 // Vercel le mappe maintenant sur /api/index (ou /api via vercel.json).
 // Trigger deployment: 2026-02-07 14:15
-@deployment-trigger
+// @deployment-trigger
 app.post('*', async (req, res) => {
     try {
         const { amount, orderId } = req.body;
