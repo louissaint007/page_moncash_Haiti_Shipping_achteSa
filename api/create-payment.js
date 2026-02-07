@@ -1,18 +1,24 @@
-const express = require('express');
 const axios = require('axios');
-const cors = require('cors');
 
-const app = express();
-app.use(cors());
-app.use(express.json());
+module.exports = async (req, res) => {
+    // Enable CORS
+    res.setHeader('Access-Control-Allow-Credentials', true);
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
+    res.setHeader(
+        'Access-Control-Allow-Headers',
+        'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
+    );
 
-const MONCASH_API_URL = "https://sandbox.moncashbutton.digicelgroup.com/Moncash-middleware";
+    if (req.method === 'OPTIONS') {
+        res.status(200).end();
+        return;
+    }
 
-// Note: Puisque ce fichier est api/index.js (auparavant create-payment.js), 
-// Vercel le mappe maintenant sur /api/index (ou /api via vercel.json).
-// Trigger deployment: 2026-02-07 14:15
-// @deployment-trigger
-app.post('*', async (req, res) => {
+    if (req.method !== 'POST') {
+        return res.status(405).json({ error: 'Method Not Allowed' });
+    }
+
     try {
         const { amount, orderId } = req.body;
         console.log(`[SERVER] Processing payment for Order: ${orderId}, Amount: ${amount} HTG`);
@@ -23,6 +29,8 @@ app.post('*', async (req, res) => {
         if (!clientId || !secretKey) {
             return res.status(500).json({ error: "MonCash API keys missing on server." });
         }
+
+        const MONCASH_API_URL = "https://sandbox.moncashbutton.digicelgroup.com/Moncash-middleware";
 
         // 1. Authenticate
         const credentials = Buffer.from(`${clientId}:${secretKey}`).toString('base64');
@@ -59,19 +67,10 @@ app.post('*', async (req, res) => {
         const paymentToken = paymentData.payment_token.token;
         const redirectUrl = `${MONCASH_API_URL}/Checkout/Process?token=${paymentToken}`;
 
-        res.json({ url: redirectUrl });
+        res.status(200).json({ url: redirectUrl });
 
     } catch (error) {
         console.error("[SERVER ERROR]", error.response ? error.response.data : error.message);
         res.status(500).json({ error: error.message });
     }
-});
-
-const PORT = process.env.PORT || 3000;
-if (process.env.NODE_ENV !== 'production') {
-    app.listen(PORT, () => {
-        console.log(`[SERVER] Middleman site running on port ${PORT}`);
-    });
-}
-
-module.exports = app;
+};
