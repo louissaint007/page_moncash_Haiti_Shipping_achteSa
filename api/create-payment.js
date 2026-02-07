@@ -6,11 +6,9 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Note: Vercel gère automatiquement les fichiers statiques dans le dossier /public
-
-const MONCASH_API_URL = "https://sandbox.moncashbutton.digicelgroup.com/Moncash-middleware";
-
-app.post('/api/create-payment', async (req, res) => {
+// Note: Puisque ce fichier est api/create-payment.js, Vercel le mappe déjà sur /api/create-payment.
+// On utilise '*' pour être sûr de capter la requête peu importe comment Vercel transmet le chemin.
+app.post('*', async (req, res) => {
     try {
         const { amount, orderId } = req.body;
         console.log(`[SERVER] Processing payment for Order: ${orderId}, Amount: ${amount} HTG`);
