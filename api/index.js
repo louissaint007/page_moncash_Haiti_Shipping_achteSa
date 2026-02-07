@@ -1,13 +1,8 @@
-require('dotenv').config();
-const express = require('express');
-const axios = require('axios');
-const cors = require('cors');
-const path = require('path');
-
 const app = express();
 app.use(cors());
 app.use(express.json());
-app.use(express.static(__dirname));
+
+// Note: Vercel gère automatiquement les fichiers statiques dans le dossier /public
 
 const MONCASH_API_URL = "https://sandbox.moncashbutton.digicelgroup.com/Moncash-middleware";
 
