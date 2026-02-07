@@ -8,8 +8,10 @@ app.use(express.json());
 
 const MONCASH_API_URL = "https://sandbox.moncashbutton.digicelgroup.com/Moncash-middleware";
 
-// Note: Puisque ce fichier est api/create-payment.js, Vercel le mappe déjà sur /api/create-payment.
-// On utilise '*' pour être sûr de capter la requête peu importe comment Vercel transmet le chemin.
+// Note: Puisque ce fichier est api/index.js (auparavant create-payment.js), 
+// Vercel le mappe maintenant sur /api/index (ou /api via vercel.json).
+// Trigger deployment: 2026-02-07 14:15
+@deployment-trigger
 app.post('*', async (req, res) => {
     try {
         const { amount, orderId } = req.body;
