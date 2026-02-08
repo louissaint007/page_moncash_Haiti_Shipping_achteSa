@@ -1,7 +1,7 @@
 document.addEventListener('DOMContentLoaded', async () => {
     const statusText = document.getElementById('status-text');
 
-    // Récupération des paramètres depuis l'URL
+    // 1. Récupération des paramètres depuis l'URL
     const urlParams = new URLSearchParams(window.location.search);
     const amount = urlParams.get('amount');
     const orderId = urlParams.get('orderId');
@@ -17,7 +17,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         statusText.innerText = "Connexion sécurisée à MonCash...";
         console.log(`>>> [CLIENT] Tentative de paiement pour: ${amount} HTG (Order: ${orderId})`);
 
-        // Appel de votre API sur Vercel
+        // 2. Appel de votre API sur Vercel
         const response = await fetch('/api/create-payment', {
             method: 'POST',
             headers: {
@@ -26,15 +26,19 @@ document.addEventListener('DOMContentLoaded', async () => {
             body: JSON.stringify({ amount, orderId })
         });
 
-        // Lecture de la réponse JSON
+        // 3. Lecture de la réponse JSON
         const data = await response.json();
 
         if (response.ok && data.url) {
             statusText.innerText = "Redirection vers le formulaire MonCash...";
-            console.log(">>> [CLIENT] URL de paiement reçue:", data.url);
+            console.log(">>> [CLIENT] URL de paiement reçue, redirection forcée...");
             
-            // Redirection immédiate sans délai pour éviter les blocages de navigateurs
-            window.location.href = data.url;
+            /* SOLUTION AU PROBLÈME X-FRAME-OPTIONS :
+               On utilise window.top.location.href pour s'assurer que la page 
+               entière est redirigée, même si le script est exécuté dans un 
+               contexte que le navigateur juge restreint.
+            */
+            window.top.location.href = data.url;
             
         } else {
             // Si le serveur renvoie une erreur (ex: 401 ou 500)
@@ -46,5 +50,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.error(">>> [CLIENT ERROR]:", error);
         statusText.innerText = "Erreur: " + error.message;
         statusText.style.color = "#ff4444";
+        
+        // Option de secours : si la redirection automatique échoue encore
+        if (error.message.includes('redirect') || !statusText.innerText.includes('facturation')) {
+            statusText.innerHTML += `<br><br><a href="javascript:location.reload()" style="color:white;text-decoration:underline;">Réessayer</a>`;
+        }
     }
 });
