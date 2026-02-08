@@ -1,79 +1,89 @@
 const axios = require('axios');
 
 module.exports = async (req, res) => {
-    // Configuration des Headers CORS pour Vercel
+    // Headers CORS
     res.setHeader('Access-Control-Allow-Credentials', true);
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
-    res.setHeader(
-        'Access-Control-Allow-Headers',
-        'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
-    );
+    res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
 
-    // Gérer la requête de pré-vérification (Preflight)
     if (req.method === 'OPTIONS') {
         res.status(200).end();
         return;
     }
 
-    if (req.method !== 'POST') {
-        return res.status(405).json({ error: 'Méthode non autorisée' });
-    }
+    console.log(">>> [DEBUG] Nouvelle requête reçue");
 
     try {
         const { amount, orderId } = req.body;
-        
-        // Utilisation des variables d'environnement Vercel 
+        console.log(`>>> [DEBUG] Données reçues: Montant=${amount}, OrderID=${orderId}`);
+
+        // 1. Vérification des variables d'environnement
         const clientId = process.env.MONCASH_CLIENT_ID;
-        const secretKey = process.env.MONCASH_CLIENT_SECRET; // Vérifiez bien ce nom dans Vercel
+        const secretKey = process.env.MONCASH_CLIENT_SECRET;
+
+        console.log(">>> [DEBUG] Vérification des clés Vercel:");
+        console.log("- MONCASH_CLIENT_ID présent:", !!clientId);
+        console.log("- MONCASH_CLIENT_SECRET présent:", !!secretKey);
 
         if (!clientId || !secretKey) {
-            return res.status(500).json({ error: "Les clés API MonCash sont manquantes sur le serveur." });
+            console.error(">>> [ERREUR] Clés manquantes dans l'interface Vercel !");
+            return res.status(500).json({ error: "Clés API manquantes sur Vercel." });
         }
 
-        // URL correcte pour le Sandbox MonCash
         const MONCASH_API_URL = "https://sandbox.moncashbutton.digicelgroup.com/Api";
+        console.log(`>>> [DEBUG] Utilisation de l'URL API: ${MONCASH_API_URL}`);
 
-        // 1. Authentification pour obtenir le Token
+        // 2. Authentification
+        console.log(">>> [DEBUG] Étape 1: Tentative d'authentification...");
         const credentials = Buffer.from(`${clientId}:${secretKey}`).toString('base64');
-        const authResponse = await axios.post(`${MONCASH_API_URL}/Authenticate`, {}, {
-            headers: {
-                'Accept': 'application/json',
-                'Authorization': `Basic ${credentials}`
+        
+        try {
+            const authResponse = await axios.post(`${MONCASH_API_URL}/Authenticate`, {}, {
+                headers: {
+                    'Accept': 'application/json',
+                    'Authorization': `Basic ${credentials}`
+                }
+            });
+
+            console.log(">>> [DEBUG] Authentification réussie ! Status:", authResponse.status);
+            const accessToken = authResponse.data.access_token;
+
+            // 3. Création du paiement
+            console.log(">>> [DEBUG] Étape 2: Création du paiement avec le token...");
+            const paymentResponse = await axios.post(`${MONCASH_API_URL}/Checkout/Payment`, {
+                amount: amount,
+                orderId: orderId
+            }, {
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`
+                }
+            });
+
+            console.log(">>> [DEBUG] Paiement créé avec succès !");
+            const paymentToken = paymentResponse.data.payment_token.token;
+            const redirectUrl = `https://sandbox.moncashbutton.digicelgroup.com/Moncash-middleware/Checkout/Process?token=${paymentToken}`;
+
+            console.log(">>> [DEBUG] URL de redirection générée:", redirectUrl);
+            res.status(200).json({ url: redirectUrl });
+
+        } catch (apiError) {
+            // Log spécifique pour les erreurs de l'API MonCash (comme la 401)
+            console.error(">>> [ERREUR API MONCASH]");
+            if (apiError.response) {
+                console.error("- Status:", apiError.response.status);
+                console.error("- Données d'erreur:", JSON.stringify(apiError.response.data, null, 2));
+                console.error("- Headers envoyés (masqués): Authorization: Basic [REDACTED]");
+            } else {
+                console.error("- Message:", apiError.message);
             }
-        });
-
-        const accessToken = authResponse.data.access_token;
-        if (!accessToken) {
-            throw new Error("Impossible d'obtenir le token d'accès MonCash.");
+            throw apiError; // Renvoie vers le catch principal
         }
-
-        // 2. Création du paiement
-        const paymentResponse = await axios.post(`${MONCASH_API_URL}/Checkout/Payment`, {
-            amount: amount,
-            orderId: orderId
-        }, {
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${accessToken}`
-            }
-        });
-
-        const paymentData = paymentResponse.data;
-
-        if (!paymentData.payment_token || !paymentData.payment_token.token) {
-            throw new Error(paymentData.status || 'Échec de la création du paiement');
-        }
-
-        // 3. Construction de l'URL de redirection finale
-        const paymentToken = paymentData.payment_token.token;
-        const redirectUrl = `https://sandbox.moncashbutton.digicelgroup.com/Moncash-middleware/Checkout/Process?token=${paymentToken}`;
-
-        res.status(200).json({ url: redirectUrl });
 
     } catch (error) {
-        console.error("[SERVER ERROR]", error.response ? error.response.data : error.message);
+        console.error(">>> [CRITICAL ERROR]", error.message);
         res.status(500).json({ error: error.message });
     }
 };
