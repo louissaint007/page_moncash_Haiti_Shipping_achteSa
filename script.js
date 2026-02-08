@@ -1,59 +1,58 @@
 document.addEventListener('DOMContentLoaded', async () => {
     const statusText = document.getElementById('status-text');
 
-    // 1. Récupération des paramètres depuis l'URL
     const urlParams = new URLSearchParams(window.location.search);
     const amount = urlParams.get('amount');
     const orderId = urlParams.get('orderId');
 
-    // Vérification de la présence des données
     if (!amount || !orderId) {
-        statusText.innerText = "Erreur: Informations de facturation manquantes (Montant ou OrderID).";
-        statusText.style.color = "#ff4444";
+        statusText.innerText = "Erreur: Informations manquantes.";
         return;
     }
 
     try {
         statusText.innerText = "Connexion sécurisée à MonCash...";
-        console.log(`>>> [CLIENT] Tentative de paiement pour: ${amount} HTG (Order: ${orderId})`);
 
-        // 2. Appel de votre API sur Vercel
         const response = await fetch('/api/create-payment', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ amount, orderId })
         });
 
-        // 3. Lecture de la réponse JSON
         const data = await response.json();
 
         if (response.ok && data.url) {
-            statusText.innerText = "Redirection vers le formulaire MonCash...";
-            console.log(">>> [CLIENT] URL de paiement reçue, redirection forcée...");
-            
-            /* SOLUTION AU PROBLÈME X-FRAME-OPTIONS :
-               On utilise window.top.location.href pour s'assurer que la page 
-               entière est redirigée, même si le script est exécuté dans un 
-               contexte que le navigateur juge restreint.
-            */
-            window.top.location.href = data.url;
-            
+            console.log(">>> [CLIENT] URL de paiement reçue");
+
+            // 1. On change le texte pour inviter l'utilisateur à cliquer si ça bloque
+            statusText.innerHTML = `
+                <div style="margin-top: 20px;">
+                    <p style="margin-bottom: 15px;">Votre lien de paiement est prêt.</p>
+                    <a href="${data.url}" id="pay-button" target="_top" style="
+                        background-color: #ff0000;
+                        color: white;
+                        padding: 12px 24px;
+                        border-radius: 8px;
+                        text-decoration: none;
+                        font-weight: bold;
+                        display: inline-block;
+                        box-shadow: 0 4px 15px rgba(255,0,0,0.3);
+                    ">Payer ${amount} HTG maintenant</a>
+                </div>
+            `;
+
+            // 2. On tente quand même la redirection automatique immédiatement
+            setTimeout(() => {
+                window.top.location.href = data.url;
+            }, 100);
+
         } else {
-            // Si le serveur renvoie une erreur (ex: 401 ou 500)
-            const errorMsg = data.error || "Erreur inconnue du serveur.";
-            throw new Error(errorMsg);
+            throw new Error(data.error || "Erreur serveur.");
         }
 
     } catch (error) {
         console.error(">>> [CLIENT ERROR]:", error);
         statusText.innerText = "Erreur: " + error.message;
         statusText.style.color = "#ff4444";
-        
-        // Option de secours : si la redirection automatique échoue encore
-        if (error.message.includes('redirect') || !statusText.innerText.includes('facturation')) {
-            statusText.innerHTML += `<br><br><a href="javascript:location.reload()" style="color:white;text-decoration:underline;">Réessayer</a>`;
-        }
     }
 });
