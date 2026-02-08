@@ -24,7 +24,7 @@ module.exports = async (req, res) => {
         console.log(`[SERVER] Processing payment for Order: ${orderId}, Amount: ${amount} HTG`);
 
         const clientId = process.env.MONCASH_CLIENT_ID;
-        const secretKey = process.env.MONCASH_SECRET_KEY;
+        const secretKey = process.env.MONCASH_CLIENT_SECRET;
 
         if (!clientId || !secretKey) {
             return res.status(500).json({ error: "MonCash API keys missing on server." });
