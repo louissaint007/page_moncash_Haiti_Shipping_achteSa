@@ -28,9 +28,9 @@ module.exports = async (req, res) => {
 
         if (!clientId || !secretKey) {
             return res.status(500).json({ error: "MonCash API keys missing on server." });
-        }
+        }middleware
 
-        const MONCASH_API_URL = "https://sandbox.moncashbutton.digicelgroup.com/Moncash-middleware";
+        const MONCASH_API_URL = "https://sandbox.moncashbutton.digicelgroup.com/Api";
 
         // 1. Authenticate
         const credentials = Buffer.from(`${clientId}:${secretKey}`).toString('base64');
