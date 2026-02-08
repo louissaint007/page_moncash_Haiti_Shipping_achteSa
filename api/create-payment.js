@@ -1,89 +1,88 @@
 const axios = require('axios');
 
 module.exports = async (req, res) => {
-    // Headers CORS
+    // Configuration des Headers CORS pour Vercel
     res.setHeader('Access-Control-Allow-Credentials', true);
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
-    res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
+    res.setHeader(
+        'Access-Control-Allow-Headers',
+        'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
+    );
 
+    // Gérer la requête de pré-vérification (Preflight)
     if (req.method === 'OPTIONS') {
         res.status(200).end();
         return;
     }
 
-    console.log(">>> [DEBUG] Nouvelle requête reçue");
+    if (req.method !== 'POST') {
+        return res.status(405).json({ error: 'Méthode non autorisée' });
+    }
 
     try {
         const { amount, orderId } = req.body;
-        console.log(`>>> [DEBUG] Données reçues: Montant=${amount}, OrderID=${orderId}`);
-
-        // 1. Vérification des variables d'environnement
+        
+        // Récupération des variables d'environnement Vercel
         const clientId = process.env.MONCASH_CLIENT_ID;
         const secretKey = process.env.MONCASH_CLIENT_SECRET;
 
-        console.log(">>> [DEBUG] Vérification des clés Vercel:");
-        console.log("- MONCASH_CLIENT_ID présent:", !!clientId);
-        console.log("- MONCASH_CLIENT_SECRET présent:", !!secretKey);
-
         if (!clientId || !secretKey) {
-            console.error(">>> [ERREUR] Clés manquantes dans l'interface Vercel !");
-            return res.status(500).json({ error: "Clés API manquantes sur Vercel." });
+            return res.status(500).json({ error: "Les clés API MonCash sont manquantes sur le serveur Vercel." });
         }
 
-        const MONCASH_API_URL = "https://sandbox.moncashbutton.digicelgroup.com/Api";
-        console.log(`>>> [DEBUG] Utilisation de l'URL API: ${MONCASH_API_URL}`);
+        // Configuration des URLs selon la documentation 
+        const HOST_REST_API = "https://sandbox.moncashbutton.digicelgroup.com/Api";
+        const GATEWAY_BASE = "https://sandbox.moncashbutton.digicelgroup.com/Moncash-middleware";
 
-        // 2. Authentification
-        console.log(">>> [DEBUG] Étape 1: Tentative d'authentification...");
+        // 1. Authentification pour obtenir le Token 
         const credentials = Buffer.from(`${clientId}:${secretKey}`).toString('base64');
         
-        try {
-            const authResponse = await axios.post(`${MONCASH_API_URL}/Authenticate`, {}, {
+        // La doc exige grant_type=client_credentials pour le oauth/token 
+        const authResponse = await axios.post(`${HOST_REST_API}/oauth/token`, 
+            "grant_type=client_credentials&scope=read,write", 
+            {
                 headers: {
                     'Accept': 'application/json',
-                    'Authorization': `Basic ${credentials}`
+                    'Authorization': `Basic ${credentials}`,
+                    'Content-Type': 'application/x-www-form-urlencoded'
                 }
-            });
-
-            console.log(">>> [DEBUG] Authentification réussie ! Status:", authResponse.status);
-            const accessToken = authResponse.data.access_token;
-
-            // 3. Création du paiement
-            console.log(">>> [DEBUG] Étape 2: Création du paiement avec le token...");
-            const paymentResponse = await axios.post(`${MONCASH_API_URL}/Checkout/Payment`, {
-                amount: amount,
-                orderId: orderId
-            }, {
-                headers: {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${accessToken}`
-                }
-            });
-
-            console.log(">>> [DEBUG] Paiement créé avec succès !");
-            const paymentToken = paymentResponse.data.payment_token.token;
-            const redirectUrl = `https://sandbox.moncashbutton.digicelgroup.com/Moncash-middleware/Checkout/Process?token=${paymentToken}`;
-
-            console.log(">>> [DEBUG] URL de redirection générée:", redirectUrl);
-            res.status(200).json({ url: redirectUrl });
-
-        } catch (apiError) {
-            // Log spécifique pour les erreurs de l'API MonCash (comme la 401)
-            console.error(">>> [ERREUR API MONCASH]");
-            if (apiError.response) {
-                console.error("- Status:", apiError.response.status);
-                console.error("- Données d'erreur:", JSON.stringify(apiError.response.data, null, 2));
-                console.error("- Headers envoyés (masqués): Authorization: Basic [REDACTED]");
-            } else {
-                console.error("- Message:", apiError.message);
             }
-            throw apiError; // Renvoie vers le catch principal
+        );
+
+        const accessToken = authResponse.data.access_token;
+        if (!accessToken) {
+            throw new Error("Impossible d'obtenir le token d'accès MonCash.");
         }
 
+        // 2. Création du paiement 
+        const paymentResponse = await axios.post(`${HOST_REST_API}/v1/CreatePayment`, {
+            amount: amount,
+            orderId: orderId
+        }, {
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${accessToken}`
+            }
+        });
+
+        const paymentData = paymentResponse.data;
+
+        // Vérification de la présence du token dans la réponse [cite: 38, 41]
+        if (!paymentData.payment_token || !paymentData.payment_token.token) {
+            throw new Error(paymentData.status || 'Échec de la création du paiement');
+        }
+
+        // 3. Construction de l'URL de redirection finale 
+        const paymentToken = paymentData.payment_token.token;
+        const redirectUrl = `${GATEWAY_BASE}/Payment/Redirect?token=${paymentToken}`;
+
+        // Retourner l'URL au client (script.js)
+        res.status(200).json({ url: redirectUrl });
+
     } catch (error) {
-        console.error(">>> [CRITICAL ERROR]", error.message);
+        console.error("[SERVER ERROR]", error.response ? error.response.data : error.message);
         res.status(500).json({ error: error.message });
     }
 };
