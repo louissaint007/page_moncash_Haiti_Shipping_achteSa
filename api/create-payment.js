@@ -1,4 +1,8 @@
 const axios = require('axios');
+const { createClient } = require('@supabase/supabase-js');
+
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
+
 
 module.exports = async (req, res) => {
     // Configuration des Headers CORS pour Vercel
@@ -22,7 +26,7 @@ module.exports = async (req, res) => {
 
     try {
         const { amount, orderId } = req.body;
-        
+
         // Récupération des variables d'environnement Vercel
         const clientId = process.env.MONCASH_CLIENT_ID;
         const secretKey = process.env.MONCASH_CLIENT_SECRET;
@@ -37,10 +41,10 @@ module.exports = async (req, res) => {
 
         // 1. Authentification pour obtenir le Token 
         const credentials = Buffer.from(`${clientId}:${secretKey}`).toString('base64');
-        
+
         // La doc exige grant_type=client_credentials pour le oauth/token 
-        const authResponse = await axios.post(`${HOST_REST_API}/oauth/token`, 
-            "grant_type=client_credentials&scope=read,write", 
+        const authResponse = await axios.post(`${HOST_REST_API}/oauth/token`,
+            "grant_type=client_credentials&scope=read,write",
             {
                 headers: {
                     'Accept': 'application/json',
@@ -78,7 +82,22 @@ module.exports = async (req, res) => {
         const paymentToken = paymentData.payment_token.token;
         const redirectUrl = `${GATEWAY_BASE}/Payment/Redirect?token=${paymentToken}`;
 
+        // 4. Enregistrement initial dans Supabase
+        try {
+            await supabase.from('payments').upsert({
+                order_id: orderId,
+                amount_htg: amount,
+                status: 'PENDING',
+                payload: { token: paymentToken }
+            });
+            console.log(`[DB] Paiement PENDING enregistré pour l'ordre: ${orderId}`);
+        } catch (dbError) {
+            console.error("[DB ERROR]", dbError.message);
+            // On ne bloque pas le paiement si la DB échoue, mais on log l'erreur
+        }
+
         // Retourner l'URL au client (script.js)
+
         res.status(200).json({ url: redirectUrl });
 
     } catch (error) {

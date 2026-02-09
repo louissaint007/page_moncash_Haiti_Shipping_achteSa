@@ -2,13 +2,28 @@ document.addEventListener('DOMContentLoaded', async () => {
     const statusText = document.getElementById('status-text');
 
     const urlParams = new URLSearchParams(window.location.search);
-    const amount = urlParams.get('amount');
+    const status = urlParams.get('status');
+
     const orderId = urlParams.get('orderId');
+    const amount = urlParams.get('amount');
+
+    if (status === 'success') {
+        statusText.innerHTML = `
+            <div style="text-align: center; color: #4CAF50;">
+                <h2 style="margin-bottom: 20px;">Paiement Réussi !</h2>
+                <p>Votre commande <strong>#${orderId}</strong> a été payée avec succès.</p>
+                <div style="font-size: 50px; margin: 20px 0;">✅</div>
+                <p>Vous pouvez maintenant fermer cette page ou retourner à l'application.</p>
+            </div>
+        `;
+        return;
+    }
 
     if (!amount || !orderId) {
         statusText.innerText = "Erreur: Informations manquantes.";
         return;
     }
+
 
     try {
         statusText.innerText = "Connexion sécurisée à MonCash...";
